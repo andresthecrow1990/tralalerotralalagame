@@ -1,3 +1,547 @@
-<html>
-  
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aventura de Tiburón Saltarin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #000033;
+            color: #FFFFFF;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #gameContainer {
+            border: 4px solid #FFFFFF;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            position: relative;
+        }
+        canvas {
+            display: block;
+            background-color: #0077CC; /* Default background */
+            border-radius: 6px;
+        }
+        .game-ui {
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+            padding: 10px 0;
+            font-size: 1em; 
+        }
+        .game-ui div {
+            margin: 0 5px; 
+        }
+        .game-button {
+            background-color: #FF6347;
+            color: white;
+            border: 2px solid #FFFFFF;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            text-transform: uppercase;
+            box-shadow: 0 4px #c0392b;
+            transition: all 0.1s ease;
+        }
+        .game-button:active {
+            box-shadow: 0 2px #c0392b;
+            transform: translateY(2px);
+        }
+        .game-button:hover:not(:disabled) {
+            background-color: #FF4500;
+        }
+        .game-button:disabled {
+            background-color: #A0A0A0;
+            cursor: not-allowed;
+            box-shadow: 0 4px #606060;
+        }
+        #messageBox { 
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.3em;
+            z-index: 100;
+            display: none;
+        }
+        #messageBox button {
+            margin-top: 20px;
+        }
+        #mobileControls {
+            display: none; 
+            margin-top: 15px;
+            text-align: center;
+        }
+        #mobileControls button {
+            margin: 0 5px;
+            padding: 12px 15px; 
+            font-size: 1em;
+        }
+        #loadingMessage {
+            margin-top: 10px;
+            font-size: 1.2em;
+            color: #FFD700; 
+        }
+        #powerUpInfo {
+            background-color: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #555;
+        }
+        #powerUpInfo p {
+            margin: 3px 0;
+            display: flex; 
+            align-items: center;
+        }
+        .powerup-emoji {
+            font-size: 1.2em; 
+            margin-right: 8px;
+            width: 20px; 
+            text-align: center;
+        }
+        #bossHpContainer {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 20px;
+            background-color: #555;
+            border: 2px solid #FFF;
+            border-radius: 5px;
+            display: none; /* Hidden by default */
+            z-index: 50;
+        }
+        #bossHpBar {
+            width: 100%;
+            height: 100%;
+            background-color: #FF0000; /* Red */
+            border-radius: 3px;
+            transition: width 0.2s ease-out;
+        }
+        #pauseOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            color: white;
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            z-index: 90;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-ui">
+        <div>Nivel: <span id="levelDisplay">1</span></div>
+        <div>Puntaje: <span id="scoreDisplay">0</span></div>
+        <div>Meta: <span id="goalDisplay">0</span></div>
+        <div>Vidas: <span id="livesDisplay">3</span></div>
+    </div>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="bossHpContainer">
+            <div id="bossHpBar"></div>
+        </div>
+        <div id="pauseOverlay">JUEGO PAUSADO</div>
+        <div id="messageBox">
+            <p id="messageText"></p>
+            <button id="messageButton" class="game-button">OK</button>
+        </div>
+    </div>
+
+    <div id="controls" class="mt-4 text-center">
+        <button id="startButton" class="game-button" disabled>Cargando...</button>
+        <div id="loadingMessage">Cargando assets... (0/0)</div>
+        <p class="mt-2 text-sm">ESPACIO: Saltar, FLECHAS: Mover, ABAJO/S: Agachar. Controles táctiles en móviles.</p>
+        <div class="mt-2">
+            <button id="pauseButton" class="game-button" style="display: none;">Pausa</button>
+            <label class="ml-4 text-xs"><input type="checkbox" id="debugHitboxToggle"> Mostrar Hitboxes</label>
+        </div>
+        <div id="powerUpInfo" class="mt-3 text-xs mx-auto max-w-md">
+            <p class="font-bold text-sm mb-1">--- Power-Ups ---</p>
+            <p><span class="powerup-emoji">🛡️</span>Escudo Protector: Invencibilidad temporal.</p>
+            <p><span class="powerup-emoji">🔱</span>Tridente Disparador: Permite disparar (Tecla F).</p>
+            <p><span class="powerup-emoji">💎</span>Gema de Puntos: ¡+250 Puntos!</p>
+            <p><span class="powerup-emoji">❤️</span>Vida Extra: ¡Ganas una vida!</p>
+        </div>
+    </div>
+    
+    <div id="mobileControls">
+        <button id="leftButton" class="game-button">Izquierda</button>
+        <button id="crouchButton" class="game-button">Agachar</button>
+        <button id="jumpButton" class="game-button">Saltar</button>
+        <button id="rightButton" class="game-button">Derecha</button>
+        <button id="shootButtonMobile" class="game-button" style="display:none;">Disparar</button> 
+    </div>
+
+    <script>
+        console.log("SCRIPT TAG EXECUTION STARTED (v3.22)"); 
+
+        // --- GLOBAL VARIABLES & CONSTANTS ---
+        const keyState = {}; 
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 400;
+        const GROUND_HEIGHT = 50;
+        const SHARK_WIDTH = 100; 
+        const SHARK_HEIGHT = 60; 
+        const SHARK_CROUCH_HEIGHT = SHARK_HEIGHT * 0.6;
+        const SHARK_JUMP_POWER = 16; 
+        const SHARK_MOVE_SPEED = 5;
+        const GRAVITY = 0.8;
+        const MAX_LEVELS = 5; 
+        const levelScoreGoals = [0, 500, 1200, 2000, 3000, Infinity]; 
+
+        // DOM Elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas ? canvas.getContext('2d') : null; 
+        const debugHitboxToggle = document.getElementById('debugHitboxToggle');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const livesDisplay = document.getElementById('livesDisplay');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const goalDisplay = document.getElementById('goalDisplay'); 
+        const startButton = document.getElementById('startButton');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const messageBox = document.getElementById('messageBox'); 
+        const messageText = document.getElementById('messageText');
+        const messageButton = document.getElementById('messageButton');
+        const mobileControls = document.getElementById('mobileControls');
+        const jumpButton = document.getElementById('jumpButton');
+        const leftButton = document.getElementById('leftButton');
+        const rightButton = document.getElementById('rightButton');
+        const crouchButton = document.getElementById('crouchButton');
+        const shootButtonMobile = document.getElementById('shootButtonMobile');
+        const bossHpContainer = document.getElementById('bossHpContainer');
+        const bossHpBar = document.getElementById('bossHpBar');
+        const pauseButton = document.getElementById('pauseButton');
+        const pauseOverlay = document.getElementById('pauseOverlay');
+
+
+        // Game State Variables
+        let DEBUG_SHOW_HITBOXES = false; 
+        let score = 0;
+        let lives = 3;
+        let currentLevel = 1;
+        let gameSpeed = 2;
+        let gameOver = false;
+        let gameRunning = false;
+        let systemPaused = false; 
+        let userPaused = false;  
+        let victoryMode = false; 
+
+        let assetsToLoad = 0; 
+        let assetsLoaded = 0;
+        const images = {};
+        let bonusPowerUpSpawnedThisLevel = false;
+        let lifePowerUpSpawnedThisLevel = false;
+        let gameLoopRequestId = null; 
+        let gameLoopTicks = 0; 
+        let currentSharkJumpPower = SHARK_JUMP_POWER; 
+        let confettiParticles = [];
+        let explosionParticles = [];
+
+
+        if (canvas) { canvas.width = GAME_WIDTH; canvas.height = GAME_HEIGHT; console.log("Canvas dimensions set."); } else { console.error("ERROR: Canvas element not found on script load!"); }
+        if (debugHitboxToggle) { debugHitboxToggle.addEventListener('change', (event) => { DEBUG_SHOW_HITBOXES = event.target.checked; }); } else { console.warn("Debug hitbox toggle not found on init."); }
+
+
+        // --- ASSET LOADING ---
+        assetLoaded = function(assetName, success = true) { assetsLoaded++; if (loadingMessage) loadingMessage.textContent = `Cargando assets... (${assetsLoaded}/${assetsToLoad})`; if (success) { console.log(`Asset cargado exitosamente: ${assetName}`); } else { console.error(`Error al cargar asset: ${assetName}`); } if (assetsLoaded === assetsToLoad) { console.log("Todas las solicitudes de assets han sido procesadas (cargadas o con error)."); Object.keys(images).forEach(key => { console.log(`Estado final de ${key}: ${images[key].complete ? 'COMPLETADA' : 'NO COMPLETADA / ERROR'}, src: ${images[key].src}, width: ${images[key].width}`); }); if(loadingMessage) loadingMessage.style.display = 'none'; if(startButton) { startButton.disabled = false; startButton.textContent = "Iniciar Juego"; } console.log("Botón de inicio habilitado."); if (images.shark && images.shark.complete && images.shark.width > 0) { console.log("Dibujando vista previa del tiburón."); if(ctx) { ctx.clearRect(0,0, GAME_WIDTH, GAME_HEIGHT); drawGround(); ctx.drawImage(images.shark, 50, GAME_HEIGHT - GROUND_HEIGHT - SHARK_HEIGHT, SHARK_WIDTH, SHARK_HEIGHT); if (DEBUG_SHOW_HITBOXES) { const previewShark = { x: 50, y: GAME_HEIGHT - GROUND_HEIGHT - SHARK_HEIGHT, width: SHARK_WIDTH, height: SHARK_HEIGHT, originalHeight: SHARK_HEIGHT, isCrouching: false, hitboxInsets: shark.hitboxInsets }; drawHitbox(previewShark, 'rgba(0, 150, 255, 0.5)'); } } } else { console.warn("Imagen del tiburón (shark) no disponible o no cargada correctamente para la vista previa."); if(ctx) { ctx.clearRect(0,0, GAME_WIDTH, GAME_HEIGHT); drawGround(); ctx.fillStyle = 'grey'; ctx.fillRect(50, GAME_HEIGHT - GROUND_HEIGHT - SHARK_HEIGHT, SHARK_WIDTH, SHARK_HEIGHT); ctx.fillStyle = 'white'; ctx.fillText("Shark?", 60, GAME_HEIGHT - GROUND_HEIGHT - SHARK_HEIGHT/2); } } } };
+        loadAsset = function(name, src) { console.log(`Iniciando carga de asset: ${name} desde ${src}`); images[name] = new Image(); images[name].src = src; images[name].onload = () => assetLoaded(name, true); images[name].onerror = (e) => { console.error(`Detalles del error al cargar la imagen: ${name} desde ${src}. Evento de error:`, e); assetLoaded(name, false); }; };
+        drawGround = function() { if (ctx) { ctx.fillStyle = '#F4A460'; ctx.fillRect(0, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT); } };
+        getHitbox = function(entity) { const insets = entity.hitboxInsets || { top: 0, bottom: 0, left: 0, right: 0 }; let currentVisualHeight; let entityY = entity.y; if (entity === shark) { currentVisualHeight = entity.isCrouching ? entity.crouchHeight : entity.originalHeight; } else { currentVisualHeight = entity.height; } return { x: entity.x + insets.left, y: entityY + insets.top, width: entity.width - insets.left - insets.right, height: currentVisualHeight - insets.top - insets.bottom }; };
+        drawHitbox = function(entity, color = 'rgba(255, 0, 0, 0.5)') { if (!DEBUG_SHOW_HITBOXES || !entity || !ctx) return; const hitbox = getHitbox(entity); ctx.fillStyle = color; ctx.fillRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height); };
+
+
+        // --- PLAYER (SHARK - Tralalero) ---
+        const shark = {
+            x: 50, y: GAME_HEIGHT - GROUND_HEIGHT - SHARK_HEIGHT, width: SHARK_WIDTH, height: SHARK_HEIGHT, 
+            originalHeight: SHARK_HEIGHT, crouchHeight: SHARK_CROUCH_HEIGHT, isCrouching: false,
+            img: null, hitboxInsets: { top: 10, bottom: 10, left: 15, right: 15 }, 
+            velocityX: 0, velocityY: 0, isJumping: false, isInvincible: false, canShoot: false,
+            invincibilityTimer: 0, shootTimer: 0, activePowerUpText: "", activePowerUpDuration: 0, 
+            victoryJumpTimer: 0, victoryJumpDelay: 15, 
+            draw: function() { if (!ctx) return; const currentVisualDrawHeight = this.isCrouching ? this.crouchHeight : this.originalHeight; if (this.img && this.img.complete && this.img.width > 0) { if (this.isInvincible && Math.floor(this.invincibilityTimer / 10) % 2 === 0) {/* Flash */} else { ctx.drawImage(this.img, this.x, this.y, this.width, currentVisualDrawHeight); } } else { ctx.fillStyle = this.isInvincible ? '#FFFF00' : '#9DB2BF'; ctx.fillRect(this.x, this.y, this.width, currentVisualDrawHeight); } drawHitbox(this, 'rgba(0, 150, 255, 0.5)'); if (this.activePowerUpText && this.activePowerUpDuration > 0) { ctx.fillStyle = "rgba(255, 255, 0, 0.9)"; ctx.font = "16px 'Press Start 2P'"; ctx.textAlign = "center"; ctx.fillText(this.activePowerUpText, GAME_WIDTH / 2, 30); } },
+            update: function() { this.x += this.velocityX; if (this.x < 0) this.x = 0; if (this.x + this.width > GAME_WIDTH) this.x = GAME_WIDTH - this.width; if (!this.isJumping) { this.y = GAME_HEIGHT - GROUND_HEIGHT - (this.isCrouching ? this.crouchHeight : this.originalHeight); } if (this.isJumping) { this.y += this.velocityY; this.velocityY += GRAVITY; const currentVisualHeight = this.isCrouching ? this.crouchHeight : this.originalHeight; if (this.y >= GAME_HEIGHT - GROUND_HEIGHT - currentVisualHeight ) { this.y = GAME_HEIGHT - GROUND_HEIGHT - currentVisualHeight; this.isJumping = false; this.velocityY = 0; } } if (this.isInvincible) { this.invincibilityTimer--; this.activePowerUpText = `🛡️ Invencible: ${Math.ceil(this.invincibilityTimer / 60)}s`; this.activePowerUpDuration = this.invincibilityTimer; if (this.invincibilityTimer <= 0) { this.isInvincible = false; if(!this.canShoot) this.activePowerUpText = "";} } if (this.canShoot) { if (currentLevel !== MAX_LEVELS) this.shootTimer--; this.activePowerUpText = `🔱 Disparos: ${currentLevel === MAX_LEVELS ? '∞' : Math.ceil(this.shootTimer / 60) + 's'}`; this.activePowerUpDuration = this.shootTimer > 0 ? this.shootTimer : (currentLevel === MAX_LEVELS ? 36000 : 0); if (this.shootTimer <= 0 && currentLevel !== MAX_LEVELS) { this.canShoot = false; if(shootButtonMobile) shootButtonMobile.style.display = 'none'; if(!this.isInvincible) this.activePowerUpText = ""; } } if (!this.isInvincible && !this.canShoot && this.activePowerUpDuration > 0) { this.activePowerUpDuration--; if (this.activePowerUpDuration <= 0) { this.activePowerUpText = ""; } } },
+            jump: function() { if (!this.isJumping && !this.isCrouching) { this.isJumping = true; this.velocityY = -currentSharkJumpPower; this.y = GAME_HEIGHT - GROUND_HEIGHT - this.originalHeight; } }, 
+            toggleCrouch: function(crouchState) { if (this.isJumping && crouchState) return; if (this.isCrouching === crouchState) return; this.isCrouching = crouchState; }
+        };
+
+        // --- ENEMY PROJECTILES ---
+        let enemyProjectiles = [];
+        createEnemyProjectile = function(x, y, type = 'normal', angle = Math.PI) { let projectileSpeed = type === 'cannon' ? 3 : (type === 'dagger' ? 7 : 5); let speedX = projectileSpeed * Math.cos(angle); let speedY = projectileSpeed * Math.sin(angle); enemyProjectiles.push({ x: x, y: y, width: type === 'cannon' ? 20 : (type === 'dagger' ? 8 : 10), height: type === 'cannon' ? 20 : (type === 'dagger' ? 16 : 5), speedX: speedX, speedY: speedY, color: type === 'cannon' ? '#333333' : (type === 'dagger' ? '#C0C0C0' : '#FF8C00'), isCannon: type === 'cannon', isDagger: type === 'dagger', draw: function() { if(!ctx) return; ctx.fillStyle = this.color; if (this.isCannon) { ctx.beginPath(); ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI*2); ctx.fill(); } else if (this.isDagger) { ctx.beginPath(); ctx.moveTo(this.x + this.width, this.y + this.height / 2); ctx.lineTo(this.x, this.y); ctx.lineTo(this.x + this.width * 0.2, this.y + this.height / 2); ctx.lineTo(this.x, this.y + this.height); ctx.closePath(); ctx.fill(); } else { ctx.fillRect(this.x, this.y, this.width, this.height); } }, update: function() { this.x += this.speedX; this.y += this.speedY; } }); };
+
+        // --- ENEMIES ---
+        let enemies = [];
+        const ENEMY_TYPES = { 
+            LEVEL_1: { name: "Bateador", imgName: "bateador", width: 60, height: 80, speedMultiplier: 1, hitboxInsets: { top: 10, bottom: 5, left: 10, right: 10 }, eliteChance: 0.15, canShoot: true, projectileType: 'normal' },
+            LEVEL_2: { name: "Ballerina", imgName: "ballerina", width: 70, height: 70, speedMultiplier: 1.2, floating: true, hitboxInsets: { top: 10, bottom: 10, left: 15, right: 15 }, verticalMove: true, verticalSpeed: 0.6, verticalRange: 65, eliteChance: 0.15, canShoot: true, projectileType: 'normal' },
+            LEVEL_3: { name: "Elefante", imgName: "elefante", width: 90, height: 75, speedMultiplier: 1.4, hitboxInsets: { top: 10, bottom: 10, left: 10, right: 10 }, eliteChance: 0.30, canShoot: true, projectileType: 'normal' },
+            LEVEL_4: { name: "Assasin", imgName: "assasin", width: 65, height: 70, speedMultiplier: 1.6, floating: true, hitboxInsets: { top: 5, bottom: 5, left: 10, right: 10 }, eliteChance: 0.20, canShoot: true, projectileType: 'dagger', verticalMove: true, verticalSpeed: 0.7, verticalRange: 60 },
+            BOSS: { name: "Bombardino", imgName: "bombardino", width: 150, height: 100, speedMultiplier: 0.7, health: 15, maxHealth: 15, hitboxInsets: { top: 15, bottom: 15, left: 20, right: 20 }, canShoot: true, shootCooldown: 90, shootTimer: 45, projectileType: 'cannon', entryX: GAME_WIDTH - 200, attackPatternCooldown: 120, currentAttackPatternTimer: 0, currentAttack: null, verticalMoveBoss: true, verticalSpeedBoss: 0.3, verticalRangeBoss: 15, isDefeatedAnimationPlaying: false, defeatFallSpeed: 2 } 
+        };
+
+        createEnemy = function() {
+            let enemyConfig; let levelKey = `LEVEL_${currentLevel}`;
+            if (currentLevel === MAX_LEVELS) { 
+                enemyConfig = ENEMY_TYPES.BOSS; 
+                if (enemies.some(e => e.isBoss && (e.health > 0 || e.isDefeatedAnimationPlaying))) { // Prevent multiple bosses or spawning if one is being defeated
+                    return; 
+                }
+            } 
+            else if (ENEMY_TYPES[levelKey]) { enemyConfig = ENEMY_TYPES[levelKey]; } 
+            else { return; }
+
+            let initialY;
+            if (enemyConfig.floating) { 
+                if (enemyConfig.name === "Ballerina" || enemyConfig.name === "Assasin") { initialY = GAME_HEIGHT - GROUND_HEIGHT - enemyConfig.height - Math.random() * (enemyConfig.verticalRange + 20); } 
+                else { initialY = GAME_HEIGHT - GROUND_HEIGHT - enemyConfig.height - Math.random() * 80; } 
+            } else { initialY = GAME_HEIGHT - GROUND_HEIGHT - enemyConfig.height; }
+            
+            const enemy = {
+                x: GAME_WIDTH, y: initialY,
+                width: enemyConfig.width, height: enemyConfig.height, img: images[enemyConfig.imgName], hitboxInsets: enemyConfig.hitboxInsets, 
+                speed: enemyConfig.isBoss ? enemyConfig.speedMultiplier * gameSpeed : gameSpeed * enemyConfig.speedMultiplier * (1 + (currentLevel -1) * 0.10), 
+                isBoss: currentLevel === MAX_LEVELS, health: enemyConfig.health || 1, maxHealth: enemyConfig.maxHealth || enemyConfig.health || 1, isElite: false,
+                shootCooldownBase: enemyConfig.shootCooldown || 120, shootTimer: 0, canShoot: enemyConfig.canShoot || false,
+                projectileType: enemyConfig.projectileType || 'normal', 
+                verticalMove: enemyConfig.verticalMove || false, verticalSpeed: enemyConfig.verticalSpeed || 0,
+                verticalDirection: 1, verticalRange: enemyConfig.verticalRange || 0, initialY: initialY, 
+                hasEntered: false, entryX: enemyConfig.entryX, 
+                attackPatternCooldown: enemyConfig.attackPatternCooldown || 180, 
+                currentAttackPatternTimer: enemyConfig.shootTimer || 0, 
+                currentAttack: null, 
+                isDefeatedAnimationPlaying: false, // For boss defeat
+                defeatFallSpeed: enemyConfig.defeatFallSpeed || 0,
+                draw: function() { if(!ctx) return; ctx.save(); if (this.img && this.img.complete && this.img.width > 0) { if (this.isElite && !this.isBoss) { ctx.filter = 'hue-rotate(300deg) saturate(1.5)'; } if(this.isDefeatedAnimationPlaying) ctx.globalAlpha = Math.max(0, 1 - ( (this.initialY + this.height + 50 - this.y) / 150)); /* Fade out as it falls */ ctx.drawImage(this.img, this.x, this.y, this.width, this.height); } else { ctx.fillStyle = this.isElite ? '#FF00FF' : '#FF0000'; ctx.fillRect(this.x, this.y, this.width, this.height); } ctx.restore(); drawHitbox(this, 'rgba(255, 0, 0, 0.4)'); },
+                update: function() { 
+                    if (this.isDefeatedAnimationPlaying) {
+                        this.y += this.defeatFallSpeed; // Boss falls down
+                        // Optional: add rotation or other effects
+                        if (this.y > GAME_HEIGHT + this.height) { // Fallen off screen
+                           if (!victoryMode) victorySequence(); // Trigger victory only once
+                        }
+                        return; // Stop other updates during defeat animation
+                    }
+
+                    if (this.isBoss) {
+                        if (!this.hasEntered) {
+                            this.x -= this.speed;
+                            if (this.x <= this.entryX) {
+                                this.x = this.entryX; this.hasEntered = true; this.speed = 0; 
+                                this.verticalMove = enemyConfig.verticalMoveBoss || false; 
+                                this.verticalSpeed = enemyConfig.verticalSpeedBoss || 0.2;
+                                this.verticalRange = enemyConfig.verticalRangeBoss || 10;
+                                this.initialY = this.y; 
+                                if(bossHpContainer) bossHpContainer.style.display = 'block';
+                            }
+                        } else { 
+                            if (this.verticalMove) { this.y += this.verticalSpeed * this.verticalDirection; if (this.y > this.initialY + this.verticalRange || this.y < this.initialY - this.verticalRange) { this.verticalDirection *= -1; this.y = Math.max(this.initialY - this.verticalRange, Math.min(this.y, this.initialY + this.verticalRange)); } }
+                        }
+                    } else {
+                        this.x -= this.speed; 
+                        if (this.verticalMove) { this.y += this.verticalSpeed * this.verticalDirection; if (this.y > this.initialY + this.verticalRange || this.y < this.initialY - this.verticalRange) { this.verticalDirection *= -1; this.y = Math.max(this.initialY - this.verticalRange, Math.min(this.y, this.initialY + this.verticalRange)); } } 
+                    }
+
+                    if (this.canShoot) {
+                        if (this.isBoss) {
+                            this.currentAttackPatternTimer--;
+                            if (this.currentAttackPatternTimer <= 0 && !this.currentAttack) {
+                                const patterns = ['SINGLE_SHOT', 'BURST_SHOT', 'SPREAD_SHOT'];
+                                const chosenPattern = patterns[Math.floor(Math.random() * patterns.length)];
+                                if (chosenPattern === 'SINGLE_SHOT') { this.currentAttack = { type: 'SINGLE_SHOT', shotsLeft: 1, shotDelay: 0, currentShotDelay: 0 }; }
+                                else if (chosenPattern === 'BURST_SHOT') { this.currentAttack = { type: 'BURST_SHOT', shotsLeft: 3, shotDelay: 15, currentShotDelay: 0 }; } 
+                                else if (chosenPattern === 'SPREAD_SHOT') { this.currentAttack = { type: 'SPREAD_SHOT', shotsLeft: 1, shotDelay: 0, currentShotDelay: 0 }; } 
+                                this.currentAttackPatternTimer = this.attackPatternCooldown + Math.floor(Math.random() * 30); 
+                            }
+
+                            if (this.currentAttack) {
+                                this.currentAttack.currentShotDelay--;
+                                if (this.currentAttack.currentShotDelay <= 0 && this.currentAttack.shotsLeft > 0) {
+                                    if (this.currentAttack.type === 'SPREAD_SHOT') {
+                                        createEnemyProjectile(this.x, this.y + this.height / 2, this.projectileType, Math.PI); 
+                                        createEnemyProjectile(this.x, this.y + this.height / 2, this.projectileType, Math.PI - 0.25); 
+                                        createEnemyProjectile(this.x, this.y + this.height / 2, this.projectileType, Math.PI + 0.25); 
+                                        this.currentAttack.shotsLeft = 0; 
+                                    } else {
+                                        createEnemyProjectile(this.x, this.y + this.height / 2, this.projectileType, Math.PI);
+                                        this.currentAttack.shotsLeft--;
+                                    }
+                                    this.currentAttack.currentShotDelay = this.currentAttack.shotDelay;
+                                }
+                                if (this.currentAttack.shotsLeft <= 0) { this.currentAttack = null; }
+                            }
+                        } else if (this.isElite) { 
+                            this.shootTimer--; 
+                            if (this.shootTimer <= 0) { 
+                                let projAngle = Math.PI; 
+                                if (this.name === "Assasin") { projAngle = Math.atan2((shark.y + shark.originalHeight/2) - (this.y + this.height/2), shark.x - this.x); if (Math.abs(projAngle) > Math.PI / 1.8) projAngle = Math.PI + (Math.random() - 0.5) * 0.2; } 
+                                createEnemyProjectile(this.x, this.y + this.height / 2, this.projectileType, projAngle); 
+                                this.shootTimer = this.shootCooldownBase + Math.floor(Math.random() * 60); 
+                            }
+                        }
+                    }
+                }
+            };
+            
+            if (!enemy.isBoss && Math.random() < (enemyConfig.eliteChance || 0)) { enemy.isElite = true; enemy.shootTimer = Math.floor(Math.random() * enemy.shootCooldownBase); enemy.speed *= 1.1; enemy.canShoot = true; }
+            if (enemy.verticalMove) { enemy.initialY = enemy.y; }
+            if (enemy.isBoss && enemyConfig.canShoot) { enemy.currentAttackPatternTimer = enemyConfig.shootTimer || enemyConfig.attackPatternCooldown; }
+            enemies.push(enemy);
+        };
+
+        // --- POWER-UPS --- 
+        let powerUps = [];
+        const POWER_UP_TYPES = { INVINCIBILITY: { name: "Escudo Protector", emoji: '🛡️', duration: 300, description: "¡Invencibilidad Temporal!" }, SHOOTER: { name: "Tridente Disparador", emoji: '🔱', duration: 420, description: "¡Puedes Disparar! (Tecla F)" }, BONUS_POINTS: { name: "Gema de Puntos", emoji: '💎', points: 250, duration: 0, description: "¡+250 Puntos!" }, EXTRA_LIFE: { name: "Vida Extra", emoji: '❤️', duration: 0, description: "¡Vida Extra!"} };
+        drawPowerUpShape = function(powerUp, ctxInstance) { if(!ctxInstance) return; ctxInstance.font = `${powerUp.width * 0.8}px Arial`; ctxInstance.textAlign = "center"; ctxInstance.textBaseline = "middle"; ctxInstance.fillText(POWER_UP_TYPES[powerUp.type].emoji, powerUp.x + powerUp.width / 2, powerUp.y + powerUp.height / 2); };
+        createPowerUp = function() { let spawnBonusAttempt = false; let spawnLifeAttempt = false; if (!bonusPowerUpSpawnedThisLevel && Math.random() < 0.15) { spawnBonusAttempt = true; } else if (!lifePowerUpSpawnedThisLevel && Math.random() < 0.10) { spawnLifeAttempt = true; } let selectedTypeKey; if (spawnBonusAttempt) { selectedTypeKey = 'BONUS_POINTS'; } else if (spawnLifeAttempt) { selectedTypeKey = 'EXTRA_LIFE'; } else { const regularTypeKeys = ['INVINCIBILITY', 'SHOOTER']; selectedTypeKey = regularTypeKeys[Math.floor(Math.random() * regularTypeKeys.length)]; } const powerUpConfig = POWER_UP_TYPES[selectedTypeKey]; if (selectedTypeKey === 'BONUS_POINTS') { if (bonusPowerUpSpawnedThisLevel) return; bonusPowerUpSpawnedThisLevel = true; } if (selectedTypeKey === 'EXTRA_LIFE') { if (lifePowerUpSpawnedThisLevel) return; lifePowerUpSpawnedThisLevel = true; } const newPowerUp = { x: GAME_WIDTH, y: GAME_HEIGHT - GROUND_HEIGHT - 100 - Math.random() * 150, width: 35, height: 35, type: selectedTypeKey, duration: powerUpConfig.duration, points: powerUpConfig.points || 0, description: powerUpConfig.description, hitboxInsets: { top:0, bottom:0, left:0, right:0}, draw: function() { drawPowerUpShape(this, ctx); }, update: function() { this.x -= gameSpeed * 0.8; } }; powerUps.push(newPowerUp); };
+
+        // --- PROJECTILES --- 
+        let projectiles = []; 
+        createProjectile = function() { if (shark.canShoot) { projectiles.push({ x: shark.x + shark.width, y: shark.y + (shark.isCrouching ? shark.crouchHeight : shark.originalHeight) / 2 - 2.5, width: 20, height: 5, speed: 8, color: '#FFFFFF', hitboxInsets: { top:0, bottom:0, left:0, right:0}, draw: function() { if(!ctx) return; ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height); }, update: function() { this.x += this.speed; } }); } };
+
+        // --- GAME LOGIC & TIMERS ---
+        let enemySpawnTimer = 0;
+        let enemySpawnInterval = 110; 
+        let powerUpSpawnTimer = 0;
+        let powerUpSpawnInterval = 400; 
+
+        updateGame = function() { 
+            if (gameOver || !gameRunning || systemPaused || userPaused) return; 
+            if (!victoryMode) shark.update(); // Only update shark if not in victory mode (or handle victory jump separately)
+            
+            if (!victoryMode && !(currentLevel === MAX_LEVELS && enemies.some(e => e.isBoss && e.health > 0))) { 
+                enemySpawnTimer++; 
+                if (enemySpawnTimer >= enemySpawnInterval) { createEnemy(); enemySpawnTimer = 0; enemySpawnInterval = Math.max(35, 110 - currentLevel * 7 - Math.floor(score / 300)); } 
+            } 
+            enemies.forEach((enemy, index) => { 
+                enemy.update(); 
+                if (enemy.x + enemy.width < 0 && !enemy.isBoss) { enemies.splice(index, 1); if (!enemy.isBoss) score += (enemy.isElite ? 60 : 10); } 
+                if (!shark.isInvincible && checkCollision(shark, enemy) && !enemy.isDefeatedAnimationPlaying) { 
+                    if (enemy.isBoss) { 
+                        enemy.health--; lives--; shark.isInvincible = true; shark.invincibilityTimer = 60; 
+                        if (enemy.health <= 0) { enemy.isDefeatedAnimationPlaying = true; createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, 50); /* No longer calls victorySequence here */ } 
+                        else if (lives <= 0) { endGame("¡Derrotado por el Jefe!");} 
+                    } else { 
+                        lives--; shark.isInvincible = true; shark.invincibilityTimer = 120; 
+                        if (lives <= 0) { endGame("¡Has perdido todas tus vidas!"); } 
+                    } 
+                } 
+            }); 
+            enemyProjectiles.forEach((ep, epIndex) => { ep.update(); if (ep.x + ep.width < 0 || ep.x > GAME_WIDTH || ep.y < -ep.height || ep.y > GAME_HEIGHT) { enemyProjectiles.splice(epIndex, 1); } if (!shark.isInvincible && checkCollision(shark, ep)) { lives--; shark.isInvincible = true; shark.invincibilityTimer = 90; enemyProjectiles.splice(epIndex, 1); if (lives <= 0) { endGame("¡Alcanzado por un proyectil enemigo!"); } } }); 
+            if (!victoryMode) {
+                powerUpSpawnTimer++; 
+                if (powerUpSpawnTimer >= powerUpSpawnInterval) { createPowerUp(); powerUpSpawnTimer = 0; } 
+                powerUps.forEach((powerUp, index) => { powerUp.update(); if (powerUp.x + powerUp.width < 0) { powerUps.splice(index, 1); } if (checkCollision(shark, powerUp)) { activatePowerUp(powerUp); powerUps.splice(index, 1); if (powerUp.type !== 'BONUS_POINTS' && powerUp.type !== 'EXTRA_LIFE') { score += 20; } } }); 
+                projectiles.forEach((projectile, pIndex) => { projectile.update(); if (projectile.x > GAME_WIDTH) { projectiles.splice(pIndex, 1); } enemies.forEach((enemy, eIndex) => { if (checkCollision(projectile, enemy) && !enemy.isDefeatedAnimationPlaying) { projectiles.splice(pIndex, 1); if (enemy.isBoss) { enemy.health--; if (enemy.health <= 0) { enemy.isDefeatedAnimationPlaying = true; createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, 50); /* No longer calls victorySequence here */ } } else { enemies.splice(eIndex, 1); score += (enemy.isElite ? 150 : 100); } return; } }); }); 
+            }
+            updateExplosionParticles();
+            if(scoreDisplay) scoreDisplay.textContent = score; if(livesDisplay) livesDisplay.textContent = lives; if(levelDisplay) levelDisplay.textContent = currentLevel; if(goalDisplay) goalDisplay.textContent = currentLevel < MAX_LEVELS ? levelScoreGoals[currentLevel] : "JEFE"; 
+            if (!victoryMode && currentLevel < MAX_LEVELS && score >= levelScoreGoals[currentLevel]) { if (!enemies.some(e => e.isBoss)) { levelComplete(); } } 
+        };
+        activatePowerUp = function(powerUpObject) { const type = powerUpObject.type; const duration = powerUpObject.duration; const points = powerUpObject.points; const description = powerUpObject.description; const emoji = POWER_UP_TYPES[type].emoji; let messageToShow = `${emoji} ${description}`; if (type === 'INVINCIBILITY') { shark.isInvincible = true; shark.invincibilityTimer = duration; shark.activePowerUpText = messageToShow; shark.activePowerUpDuration = duration; } else if (type === 'SHOOTER') { shark.canShoot = true; shark.shootTimer = duration; shark.activePowerUpText = messageToShow; shark.activePowerUpDuration = duration; if (window.innerWidth < 768 && shootButtonMobile) { shootButtonMobile.style.display = 'inline-block'; } } else if (type === 'BONUS_POINTS') { score += points; shark.activePowerUpText = messageToShow; shark.activePowerUpDuration = 120; } else if (type === 'EXTRA_LIFE') { lives++; shark.activePowerUpText = messageToShow; shark.activePowerUpDuration = 120; } };
+        levelComplete = function() { 
+            // Victory is now handled by the boss's defeat animation completion
+            if (currentLevel < MAX_LEVELS) { 
+                currentLevel++; bonusPowerUpSpawnedThisLevel = false; lifePowerUpSpawnedThisLevel = false; currentSharkJumpPower = SHARK_JUMP_POWER; 
+                showSystemMessage(`¡Nivel ${currentLevel -1} Completado! Preparando Nivel ${currentLevel}...`, () => { 
+                    gameSpeed += 0.15; enemySpawnInterval = Math.max(30, enemySpawnInterval - 5); 
+                    enemies = []; enemyProjectiles = []; powerUps = []; projectiles = []; 
+                    if(goalDisplay) goalDisplay.textContent = currentLevel < MAX_LEVELS ? levelScoreGoals[currentLevel] : "JEFE"; 
+                    if (currentLevel === MAX_LEVELS) { 
+                        shark.canShoot = true; shark.shootTimer = Infinity; shark.activePowerUpText = "🔱 ¡Disparos Infinitos vs Jefe!"; shark.activePowerUpDuration = 36000; 
+                        currentSharkJumpPower = SHARK_JUMP_POWER * 1.15; 
+                        if(bossHpContainer) bossHpContainer.style.display = 'block'; 
+                        createEnemy(); // Spawn boss immediately
+                        showSystemMessage(`¡PELIGRO! ¡${ENEMY_TYPES.BOSS.name} se acerca!`, resumeGameAfterSystemMessage); 
+                    } else { 
+                        shark.canShoot = false; shark.shootTimer = 0; 
+                        if(!shark.isInvincible) shark.activePowerUpText = ""; 
+                        if(bossHpContainer) bossHpContainer.style.display = 'none'; 
+                        resumeGameAfterSystemMessage(); 
+                    } 
+                }); 
+            } 
+        };
+        checkCollision = function(entity1, entity2) { const box1 = getHitbox(entity1); const box2 = getHitbox(entity2); return box1.x < box2.x + box2.width && box1.x + box1.width > box2.x && box1.y < box2.y + box2.height && box1.y + box1.height > box2.y; };
+        let debugBarWidth = 0; 
+        drawGame = function() { if(!ctx) { console.error("drawGame: CTX no disponible."); return; } ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT); ctx.fillStyle = '#00509E'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); ctx.fillStyle = '#0066BB'; ctx.fillRect(0, GAME_HEIGHT * 0.2, GAME_WIDTH, GAME_HEIGHT * 0.8); ctx.fillStyle = '#0077CC'; ctx.fillRect(0, GAME_HEIGHT * 0.4, GAME_WIDTH, GAME_HEIGHT * 0.6); drawGround(); drawBubbles(); shark.draw(); enemies.forEach(enemy => enemy.draw()); powerUps.forEach(powerUp => powerUp.draw()); projectiles.forEach(projectile => projectile.draw()); enemyProjectiles.forEach(ep => ep.draw()); drawExplosionParticles(); if (currentLevel === MAX_LEVELS && enemies.some(e => e.isBoss)) { const boss = enemies.find(e => e.isBoss); if (boss && bossHpBar && bossHpContainer.style.display === 'block') { const hpPercentage = Math.max(0, (boss.health / boss.maxHealth) * 100); bossHpBar.style.width = hpPercentage + "%"; } } if (victoryMode) { drawConfetti(); } ctx.fillStyle = 'red'; debugBarWidth = (debugBarWidth + 2) % GAME_WIDTH; ctx.fillRect(0, 0, debugBarWidth, 5); };
+        let bubbles = []; 
+        createBubble = function() { if (bubbles.length < 25 && Math.random() < 0.15) { bubbles.push({ x: Math.random() * GAME_WIDTH, y: GAME_HEIGHT + Math.random() * 20, radius: Math.random() * 3 + 2, speedY: Math.random() * 1.2 + 0.6, opacity: Math.random() * 0.4 + 0.2 }); } };
+        drawBubbles = function() { createBubble(); bubbles.forEach((bubble, index) => { if(!ctx) return; ctx.beginPath(); ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2); ctx.fillStyle = `rgba(220, 240, 255, ${bubble.opacity})`; ctx.fill(); bubble.y -= bubble.speedY; if (bubble.y + bubble.radius < 0) { bubbles.splice(index, 1); } }); };
+        
+        // --- EXPLOSION & VICTORY SEQUENCE ---
+        function createExplosion(x, y, count = 30) { for (let i = 0; i < count; i++) { const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 3 + 1; explosionParticles.push({ x: x, y: y, size: Math.random() * 5 + 2, color: `rgba(255, ${Math.floor(Math.random()*155 + 100)}, 0, ${Math.random()*0.5 + 0.5})`, lifespan: Math.random() * 60 + 30, velocityX: Math.cos(angle) * speed, velocityY: Math.sin(angle) * speed - Math.random() * 2 /* slight upward thrust */ }); } }
+        function updateExplosionParticles() { for (let i = explosionParticles.length - 1; i >= 0; i--) { const p = explosionParticles[i]; p.x += p.velocityX; p.y += p.velocityY; p.lifespan--; if (p.lifespan <= 0) explosionParticles.splice(i, 1); } }
+        function drawExplosionParticles() { explosionParticles.forEach(p => { if(!ctx) return; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); }); }
+        function createConfettiParticle() { const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800']; confettiParticles.push({ x: Math.random() * GAME_WIDTH, y: -10 - Math.random() * 20, width: Math.random() * 8 + 4, height: Math.random() * 15 + 8, color: colors[Math.floor(Math.random() * colors.length)], velocityY: Math.random() * 2 + 1, rotation: Math.random() * 360, rotationSpeed: (Math.random() - 0.5) * 10 }); }
+        function updateConfetti() { for (let i = confettiParticles.length - 1; i >= 0; i--) { const p = confettiParticles[i]; p.y += p.velocityY; p.rotation += p.rotationSpeed; if (p.y > GAME_HEIGHT) confettiParticles.splice(i, 1); } if (victoryMode && confettiParticles.length < 100 && Math.random() < 0.3) createConfettiParticle(); }
+        function drawConfetti() { confettiParticles.forEach(p => { if(!ctx) return; ctx.save(); ctx.translate(p.x + p.width / 2, p.y + p.height / 2); ctx.rotate(p.rotation * Math.PI / 180); ctx.fillStyle = p.color; ctx.fillRect(-p.width / 2, -p.height / 2, p.width, p.height); ctx.restore(); }); }
+        function victorySequence() { if(victoryMode) return; console.log("VICTORY SEQUENCE ACTIVATED!"); gameOver = true; gameRunning = false; victoryMode = true; if(bossHpContainer) bossHpContainer.style.display = 'none'; shark.x = GAME_WIDTH / 2 - shark.width / 2; shark.isCrouching = false; shark.activePowerUpText = ""; showSystemMessage("¡HAS COMPLETADO EL JUEGO!", startGame, "Jugar de Nuevo"); }
+
+        gameLoop = function() { gameLoopTicks++; if (gameLoopRequestId) { cancelAnimationFrame(gameLoopRequestId); } if (!systemPaused && !userPaused && !gameOver && gameRunning) { try { handleMovement(); updateGame(); } catch (e) { console.error("Error en update/movement:", e.stack); gameOver = true; } } if (!gameOver) { try { if (victoryMode) { shark.victoryJumpTimer--; if (shark.victoryJumpTimer <= 0) { shark.jump(); shark.victoryJumpTimer = shark.victoryJumpDelay + Math.random() * 10; } shark.update(); updateConfetti(); } drawGame(); } catch(e) { console.error("Error en drawGame:", e.stack); gameOver = true; } } if (!gameOver) { gameLoopRequestId = requestAnimationFrame(gameLoop); } else { if (gameLoopRequestId) { cancelAnimationFrame(gameLoopRequestId); } } };
+        startGame = function() { console.log("startGame: Iniciando..."); if (gameRunning && !gameOver) { return; } let allAssetsReady = true; let problematicAsset = ""; for (const key in images) { if (!images[key].complete || images[key].width === 0) { allAssetsReady = false; problematicAsset = key; break; } } if (!allAssetsReady) { showSystemMessage(`Error al cargar assets (${problematicAsset}). Revisa la consola e intenta recargar.`, null, "OK"); return; } if (assetsLoaded !== assetsToLoad) { showSystemMessage("Error en la carga de assets. Intenta recargar.", null, "OK"); return; } console.log("startGame: Assets listos."); score = 0; lives = 15; currentLevel = 1; bonusPowerUpSpawnedThisLevel = false; lifePowerUpSpawnedThisLevel = false; gameSpeed = 2; gameOver = false; gameRunning = true; systemPaused = false; userPaused = false; victoryMode = false; confettiParticles = []; explosionParticles = []; currentSharkJumpPower = SHARK_JUMP_POWER; shark.img = images.shark; shark.x = 50; shark.y = GAME_HEIGHT - GROUND_HEIGHT - shark.originalHeight; shark.isCrouching = false; shark.velocityX = 0; shark.isInvincible = false; shark.canShoot = false; shark.invincibilityTimer = 0; shark.shootTimer = 0; shark.activePowerUpText = ""; shark.activePowerUpDuration = 0; enemies = []; enemyProjectiles = []; powerUps = []; projectiles = []; enemySpawnTimer = 0; enemySpawnInterval = 110; powerUpSpawnTimer = 0; if(goalDisplay) goalDisplay.textContent = levelScoreGoals[currentLevel]; if(startButton) startButton.style.display = 'none'; const pControls = document.querySelector('#controls p.text-sm'); if(pControls) pControls.style.display = 'none'; const labelControls = document.querySelector('#controls label'); if(labelControls) labelControls.style.display = 'none'; const powerUpInfoEl = document.getElementById('powerUpInfo'); if(powerUpInfoEl) powerUpInfoEl.style.display = 'none'; if(bossHpContainer) bossHpContainer.style.display = 'none'; if(pauseButton) pauseButton.style.display = 'inline-block'; if(pauseButton) pauseButton.textContent = "Pausa"; if(pauseOverlay) pauseOverlay.style.display = 'none'; if (window.innerWidth < 768 && mobileControls) { mobileControls.style.display = 'flex'; mobileControls.style.justifyContent = 'center'; if(shootButtonMobile) shootButtonMobile.style.display = shark.canShoot ? 'inline-block' : 'none'; } else if (mobileControls) { mobileControls.style.display = 'none'; } hideSystemMessage(); if (gameLoopRequestId) { cancelAnimationFrame(gameLoopRequestId); } gameLoopTicks = 0; gameLoop(); };
+        endGame = function(message) { gameOver = true; gameRunning = false; if(gameLoopRequestId) cancelAnimationFrame(gameLoopRequestId); showSystemMessage(message, startGame, "Reintentar"); if(startButton) startButton.style.display = 'block'; const pCtrl = document.querySelector('#controls p.text-sm'); if(pCtrl) pCtrl.style.display = 'block'; const lCtrl = document.querySelector('#controls label'); if(lCtrl) lCtrl.style.display = 'block'; const pInfo = document.getElementById('powerUpInfo'); if(pInfo) pInfo.style.display = 'block'; if(mobileControls) mobileControls.style.display = 'none'; if(shootButtonMobile) shootButtonMobile.style.display = 'none'; if(bossHpContainer) bossHpContainer.style.display = 'none'; if(pauseButton) pauseButton.style.display = 'none'; if(pauseOverlay) pauseOverlay.style.display = 'none'; userPaused = false;};
+        function showSystemMessage(text, callback, buttonText = "OK") { if(messageText) messageText.textContent = text; if(messageButton) messageButton.textContent = buttonText; if(messageBox) messageBox.style.display = 'block'; systemPaused = true; if(messageButton) messageButton.onclick = () => { hideSystemMessage(); if (callback) callback(); }; };
+        function hideSystemMessage() { if(messageBox) messageBox.style.display = 'none'; }; 
+        function resumeGameAfterSystemMessage() { systemPaused = false; if(!gameOver && gameRunning && !userPaused) { gameLoop();} };
+        
+        function toggleUserPause() { if (gameOver || systemPaused || victoryMode) return; userPaused = !userPaused; if (userPaused) { if(pauseOverlay) pauseOverlay.style.display = 'flex'; if(pauseButton) pauseButton.textContent = "Reanudar"; } else { if(pauseOverlay) pauseOverlay.style.display = 'none'; if(pauseButton) pauseButton.textContent = "Pausa"; if(!gameOver && gameRunning){ if (gameLoopRequestId) cancelAnimationFrame(gameLoopRequestId); gameLoop(); } } }
+        if(pauseButton) pauseButton.addEventListener('click', toggleUserPause);
+
+        document.addEventListener('keydown', (e) => { keyState[e.code] = true; if (!gameRunning || gameOver || systemPaused || userPaused && e.code !== 'Escape') return; if (e.code === 'Space') { e.preventDefault(); shark.jump(); } if (e.key === 'f' || e.key === 'F') { e.preventDefault(); if (shark.canShoot) createProjectile(); } if (e.code === 'ArrowDown' || e.key === 's' || e.key === 'S') { e.preventDefault(); shark.toggleCrouch(true); } if (e.code === 'KeyP' || e.key === 'p') { e.preventDefault(); toggleUserPause(); } }); 
+        document.addEventListener('keyup', (e) => { keyState[e.code] = false; if (e.code === 'ArrowDown' || e.key === 's' || e.key === 'S') { shark.toggleCrouch(false); } });
+        function handleMovement() { if (!gameRunning || gameOver || systemPaused || userPaused) { if(shark) shark.velocityX = 0; return; } if (keyState['ArrowLeft'] || keyState['KeyA']) { if(shark) shark.velocityX = -SHARK_MOVE_SPEED; } else if (keyState['ArrowRight'] || keyState['KeyD']) { if(shark) shark.velocityX = SHARK_MOVE_SPEED; } else { if(shark) shark.velocityX = 0; } };
+        if(jumpButton) jumpButton.addEventListener('click', () => { if (!gameRunning || gameOver || systemPaused || userPaused) return; shark.jump(); });
+        if(crouchButton) crouchButton.addEventListener('pointerdown', () => { if (!gameRunning || gameOver || systemPaused || userPaused) return; shark.toggleCrouch(true); });
+        if(crouchButton) crouchButton.addEventListener('pointerup', () => { if (!gameRunning || gameOver || systemPaused || userPaused) return; shark.toggleCrouch(false); });
+        if(crouchButton) crouchButton.addEventListener('pointerleave', () => { if (!gameRunning || gameOver || systemPaused || userPaused) return; shark.toggleCrouch(false);});
+        if(leftButton) leftButton.addEventListener('pointerdown', () => keyState['ArrowLeft'] = true); 
+        if(leftButton) leftButton.addEventListener('pointerup', () => keyState['ArrowLeft'] = false);
+        if(leftButton) leftButton.addEventListener('pointerleave', () => keyState['ArrowLeft'] = false); 
+        if(rightButton) rightButton.addEventListener('pointerdown', () => keyState['ArrowRight'] = true); 
+        if(rightButton) rightButton.addEventListener('pointerup', () => keyState['ArrowRight'] = false);
+        if(rightButton) rightButton.addEventListener('pointerleave', () => keyState['ArrowRight'] = false);
+        if(shootButtonMobile) shootButtonMobile.addEventListener('click', () => { if (!gameRunning || gameOver || systemPaused || userPaused) return; if (shark.canShoot) createProjectile(); });
+        if(startButton) startButton.addEventListener('click', startGame);
+        window.addEventListener('resize', () => { if (gameRunning && !gameOver) { if (window.innerWidth < 768 && mobileControls) { mobileControls.style.display = 'flex'; mobileControls.style.justifyContent = 'center'; if(shootButtonMobile) shootButtonMobile.style.display = shark.canShoot ? 'inline-block' : 'none'; } else if (mobileControls) { mobileControls.style.display = 'none'; } } });
+        window.onload = () => {
+            console.log("window.onload disparado. Iniciando carga de assets.");
+            if(debugHitboxToggle) DEBUG_SHOW_HITBOXES = debugHitboxToggle.checked; 
+            const assetList = [ { name: 'shark', src: 'https://www.miportafolio.club/wp-content/uploads/2025/05/tiburon.png' }, { name: 'bateador', src: 'https://www.miportafolio.club/wp-content/uploads/2025/05/bateador.png' }, { name: 'ballerina', src: 'https://www.miportafolio.club/wp-content/uploads/2025/05/ballerina.png' }, { name: 'elefante', src: 'https://www.miportafolio.club/wp-content/uploads/2025/05/elefante.png' }, { name: 'assasin', src: 'https://www.miportafolio.club/wp-content/uploads/2025/05/assasin.png' }, { name: 'bombardino', src: 'https://www.miportafolio.club/wp-content/uploads/2025/05/bombardino.png' } ];
+            assetsToLoad = assetList.length; assetsLoaded = 0; 
+            if(loadingMessage) loadingMessage.textContent = `Cargando assets... (0/${assetsToLoad})`; 
+            if (assetsToLoad === 0) { 
+                console.log("No hay assets para cargar.");
+                assetLoaded("No assets to load", true); 
+            } else { 
+                assetList.forEach(asset => loadAsset(asset.name, asset.src)); 
+            }
+        };
+
+        console.log("SCRIPT TAG EXECUTION FINISHED");
+    </script>
+</body>
 </html>
